@@ -63,3 +63,8 @@
     # 处理字符串
     java -jar your_dir\HostChecker.jar "C:\example" "host" -string "8.8.0.0 example.test\n1::1 example.test"
 ```
+
+### License
+The MIT License (MIT)
+
+当然, 如果注明原作者我会很高兴
