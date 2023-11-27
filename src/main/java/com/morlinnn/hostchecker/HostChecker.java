@@ -27,12 +27,6 @@ public class HostChecker {
     private int readValidLinesIndex = 0;
     private boolean isModified = false;
     private char annotation = '#';
-    private static final String GREEN_TEXT = "\033[32m";
-    private static final String GREEN_TEXT_WHITE_BG_BOLD = "\033[47;1;32m";
-    private static final String BLACK_TEXT_WHITE_BG_BOLD = "\033[30;1;47m";
-    private static final String RED_TEXT = "\033[31m";
-    private static final String RED_TEXT_WHITE_BG_BOLD = "\033[47;1;31m";
-    private static final String COLOR_END = "\033[0m";
 
     /**
      * 从 Host 文件中加载 DNS, 如果是系统文件需要管理员权限
@@ -186,7 +180,7 @@ public class HostChecker {
     }
 
     private void printLoadMessage(int loadSize) {
-        System.out.println("load " + BLACK_TEXT_WHITE_BG_BOLD + loadSize + COLOR_END + " valid dns\n");
+        System.out.println("load " + loadSize + " valid dns\n");
     }
 
     /**
@@ -283,15 +277,9 @@ public class HostChecker {
                    int pingTime = ping(pack.addr, timeout);
                    if (pingTime == -1) {
                        System.out.println(
-                               RED_TEXT
-                               + "ping: " + pack.domain + "\n      "
-                               + COLOR_END
-                               + RED_TEXT_WHITE_BG_BOLD
+                               "ping: " + pack.domain + "\n      "
                                + pack.addr
-                               + COLOR_END
-                               + RED_TEXT
                                + " is time out"
-                               + COLOR_END
                        );
                        // 涉及异步调用共享资源需要确保操作同步
                        synchronized (this) {
@@ -299,17 +287,11 @@ public class HostChecker {
                        }
                    } else {
                        System.out.println(
-                               GREEN_TEXT
-                               + "ping: " + pack.domain + "\n      "
-                               + COLOR_END
-                               + GREEN_TEXT_WHITE_BG_BOLD
+                               "ping: " + pack.domain + "\n      "
                                + pack.addr
-                               + COLOR_END
-                               + GREEN_TEXT
                                + " ping: "
                                + pingTime
                                + "ms"
-                               + COLOR_END
                        );
                    }
                    latch.countDown();
@@ -408,17 +390,11 @@ public class HostChecker {
     private void printRemoveMessage(int total, int left, int removed) {
         System.out.println(
                 "\n"
-                        + BLACK_TEXT_WHITE_BG_BOLD
                         + total
-                        + COLOR_END
                         + " in total, "
-                        + GREEN_TEXT_WHITE_BG_BOLD
                         + left
-                        + COLOR_END
                         + " is left, "
-                        + RED_TEXT_WHITE_BG_BOLD
                         + removed
-                        +COLOR_END
                         + " is removed"
         );
     }
