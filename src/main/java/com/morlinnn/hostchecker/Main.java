@@ -1,10 +1,11 @@
 package com.morlinnn.hostchecker;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
 public class Main {
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, IOException {
         if (args.length < 2) {
             System.out.println(
                     "参数:\n"
@@ -16,6 +17,7 @@ public class Main {
                     + "-filter 过滤地址\n"
                     + "-regexp 过滤正则表达式"
             );
+            return;
         }
 
         String dir = args[0];
@@ -102,7 +104,5 @@ public class Main {
             );
         }
         checker.pingAndResolve(threadNum, timeout);
-        checker.save();
-
     }
 }

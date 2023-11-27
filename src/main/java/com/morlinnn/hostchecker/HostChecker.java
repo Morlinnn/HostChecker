@@ -2,6 +2,10 @@ package com.morlinnn.hostchecker;
 
 import java.io.*;
 import java.net.InetAddress;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -23,14 +27,21 @@ public class HostChecker {
     private int readValidLinesIndex = 0;
     private boolean isModified = false;
     private char annotation = '#';
+    private static final String GREEN_TEXT = "\033[32m";
+    private static final String GREEN_TEXT_WHITE_BG_BOLD = "\033[47;1;32m";
+    private static final String BLACK_TEXT_WHITE_BG_BOLD = "\033[30;1;47m";
+    private static final String RED_TEXT = "\033[31m";
+    private static final String RED_TEXT_WHITE_BG_BOLD = "\033[47;1;31m";
+    private static final String COLOR_END = "\033[0m";
 
     /**
      * 从 Host 文件中加载 DNS, 如果是系统文件需要管理员权限
      * @param dir 文件所在路径
      * @param fileName 文件名称
      * @param filter 过滤地址(标准 Host 文件为 "Address Domain", 此处为 Address 的过滤)的列表
+     * @throws AccessDeniedException 没有文件夹/文件的读权限
      */
-    public HostChecker(String dir, String fileName, AddressFilter filter) {
+    public HostChecker(String dir, String fileName, AddressFilter filter) throws AccessDeniedException {
         this.filter = filter;
         this.dir = dir;
         this.fileName = fileName;
@@ -43,8 +54,9 @@ public class HostChecker {
      * @param fileName 文件名称
      * @param filter 过滤地址(标准 Host 文件为 "Address Domain", 此处为 Address 的过滤)的列表
      * @param annotation 注释符号
+     * @throws AccessDeniedException 没有文件夹/文件的读权限
      */
-    public HostChecker(String dir, String fileName, AddressFilter filter, char annotation) {
+    public HostChecker(String dir, String fileName, AddressFilter filter, char annotation) throws AccessDeniedException {
         this.filter = filter;
         this.dir = dir;
         this.fileName = fileName;
@@ -58,8 +70,9 @@ public class HostChecker {
      * @param saveDir 保存路径
      * @param fileName 保存名称
      * @param filter 过滤地址(标准 Host 文件为 "Address Domain", 此处为 Address 的过滤)的列表
+     * @throws AccessDeniedException 没有文件夹/文件的读权限
      */
-    public HostChecker(String hostString, String saveDir, String fileName, AddressFilter filter) {
+    public HostChecker(String hostString, String saveDir, String fileName, AddressFilter filter) throws AccessDeniedException {
         this.fileName = fileName;
         this.dir =saveDir;
         this.filter = filter;
@@ -73,8 +86,9 @@ public class HostChecker {
      * @param fileName 保存名称
      * @param filter 过滤地址(标准 Host 文件为 "Address Domain", 此处为 Address 的过滤)的列表
      * @param annotation 注释符号
+     * @throws AccessDeniedException 没有文件夹/文件的读权限
      */
-    public HostChecker(String hostString, String saveDir, String fileName, AddressFilter filter, char annotation) {
+    public HostChecker(String hostString, String saveDir, String fileName, AddressFilter filter, char annotation) throws AccessDeniedException {
         this.fileName = fileName;
         this.dir =saveDir;
         this.filter = filter;
@@ -82,7 +96,33 @@ public class HostChecker {
         initFromString(hostString);
     }
 
-    private void init() {
+    /**
+     * 如果文件夹或文件没有读权限抛出异常
+     * @param file 文件夹或文件
+     * @throws AccessDeniedException 没有读权限
+     */
+    private static void checkReadableMessage(File file) throws AccessDeniedException {
+        if (!Files.isReadable(file.toPath())) {
+            throw new AccessDeniedException("Have no permission to read " + file.getAbsolutePath());
+        }
+    }
+
+    /**
+     * 如果文件夹或文件没有写权限抛出异常
+     * @param file 文件夹或文件
+     * @throws AccessDeniedException 没有写权限
+     */
+    private static void checkWriteableMessage(File file) throws AccessDeniedException {
+        if (!Files.isWritable(file.toPath())) {
+            throw new AccessDeniedException("Have no permission to write " + file.getAbsolutePath());
+        }
+    }
+
+    private void init() throws AccessDeniedException {
+        // 检查文件夹的读权限
+        checkReadableMessage(new File(dir));
+        // 检查文件的读权限
+        checkReadableMessage(new File(dir, fileName));
         try {
             loadFromFile();
         } catch (IOException e) {
@@ -94,7 +134,10 @@ public class HostChecker {
      * 字符串的加载方法
      * @param hostString 原字符串
      */
-    private void initFromString(String hostString) {
+    private void initFromString(String hostString) throws AccessDeniedException {
+        // 检查文件夹的读权限
+        checkReadableMessage(new File(dir));
+
         String[] strings = hostString.split("(\r\n|\n|\r)");
         validLines = new ArrayList<>();
         this.lines = new ArrayList<>();
@@ -109,6 +152,7 @@ public class HostChecker {
 
             if (!filter.filterAddress(dns.getKey())) validLines.add(i+1);
         }
+        printLoadMessage(validLines.size());
     }
 
     /**
@@ -138,6 +182,11 @@ public class HostChecker {
             line++;
         }
         raf.close();
+        printLoadMessage(validLines.size());
+    }
+
+    private void printLoadMessage(int loadSize) {
+        System.out.println("load " + BLACK_TEXT_WHITE_BG_BOLD + loadSize + COLOR_END + " valid dns\n");
     }
 
     /**
@@ -153,8 +202,8 @@ public class HostChecker {
         int domainStart = -1;
         int domainEnd = -1;
         for (int i = 0; i < str.length(); i++) {
+            if (str.charAt(i) == annotation) break;
             if (addrStart == -1) {
-                if (str.charAt(i) == '#') return null;
                 if (isValidAddress((byte) str.charAt(i))) {
                     addrStart = i;
                     continue;
@@ -233,31 +282,35 @@ public class HostChecker {
                try {
                    int pingTime = ping(pack.addr, timeout);
                    if (pingTime == -1) {
-                       System.out.println("\u001B[31m"
+                       System.out.println(
+                               RED_TEXT
                                + "ping: " + pack.domain + "\n      "
-                               + "\u001B[0m"
-                               + "\u001B[47;1;31m"
+                               + COLOR_END
+                               + RED_TEXT_WHITE_BG_BOLD
                                + pack.addr
-                               + "\u001B[0m"
-                               + "\u001B[31m"
+                               + COLOR_END
+                               + RED_TEXT
                                + " is time out"
-                               + "\u001B[0m");
+                               + COLOR_END
+                       );
                        // 涉及异步调用共享资源需要确保操作同步
                        synchronized (this) {
                            failedSet.add(pack.lineIndex);
                        }
                    } else {
-                       System.out.println("\u001B[32m"
+                       System.out.println(
+                               GREEN_TEXT
                                + "ping: " + pack.domain + "\n      "
-                               + "\u001B[0m"
-                               + "\u001B[47;1;32m"
+                               + COLOR_END
+                               + GREEN_TEXT_WHITE_BG_BOLD
                                + pack.addr
-                               + "\u001B[0m"
-                               + "\u001B[32m"
+                               + COLOR_END
+                               + GREEN_TEXT
                                + " ping: "
                                + pingTime
                                + "ms"
-                               + "\u001B[0m");
+                               + COLOR_END
+                       );
                    }
                    latch.countDown();
                } catch (IOException e) {
@@ -322,10 +375,13 @@ public class HostChecker {
 
     /**
      * 移除所有在 removeIndexes 中行的读取内容的行
-     * @param removeIndexes
+     * @param removeIndexes 需要移除的行索引
      */
     public void removeFromIndexes(Set<Integer> removeIndexes) {
-        if (removeIndexes == null || removeIndexes.isEmpty()) return;
+        if (removeIndexes == null || removeIndexes.isEmpty()) {
+            printRemoveMessage(validLines.size(), validLines.size(), 0);
+            return;
+        }
 
         List<Integer> sorted = new ArrayList<>(removeIndexes);
         sorted.sort((i1, i2) -> {
@@ -337,25 +393,62 @@ public class HostChecker {
                 return 1;
             }
         });
+
+        int removed = 0;
+        int total = validLines.size();
         for (int index : sorted) {
             System.out.println("remove: " + lines.remove(index - 1));
             validLines.remove(validLines.indexOf(index));
+            removed++;
             if (!isModified) isModified = true;
         }
+        printRemoveMessage(total, validLines.size(), removed);
+    }
+
+    private void printRemoveMessage(int total, int left, int removed) {
+        System.out.println(
+                "\n"
+                        + BLACK_TEXT_WHITE_BG_BOLD
+                        + total
+                        + COLOR_END
+                        + " in total, "
+                        + GREEN_TEXT_WHITE_BG_BOLD
+                        + left
+                        + COLOR_END
+                        + " is left, "
+                        + RED_TEXT_WHITE_BG_BOLD
+                        + removed
+                        +COLOR_END
+                        + " is removed"
+        );
     }
 
     /**
      * 将旧的文件改名为 xxx.backup 使用原文件名称创建新的文件
      */
-    public void save() {
-        if (!isModified) return;
+    public void save() throws IOException {
+        if (!isModified) {
+            System.out.println("Without modified, nothing is saved");
+            return;
+        }
 
+        printSaveFileStartMessage();
         File file = new File(dir, fileName);
+        Path filePath = file.toPath();
+        Path backup = null;
+
+        checkWriteableMessage(file);
+
+        // rename to backup
         if (file.exists()) {
-            File backup = new File(dir, fileName + ".backup");
-            int index = 0;
-            while (!file.renameTo(backup)) {
-                backup = new File(dir, fileName + " (" + index + ").backup");
+            backup = Paths.get(dir + "\\" + fileName + ".backup");
+            int index = 1;
+            while (true) {
+                if (!backup.toFile().exists()) {
+                    Files.move(filePath, filePath.resolveSibling(backup));
+                    break;
+                }
+                backup = Paths.get(dir + "\\" + fileName + " (" + index + ").backup");
                 index++;
             }
         }
@@ -365,15 +458,44 @@ public class HostChecker {
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         }
+
+        printSaveFileEndMessage(dir, backup, file.getName());
+    }
+
+    private void printSaveFileStartMessage() {
+        System.out.println(
+                "save file start."
+        );
+    }
+
+    private void printSaveFileEndMessage(String dir, Path backupName, String newFileName) {
+        if (backupName != null) {
+            System.out.println(
+                    "\nIn \""
+                            + dir
+                            + "\", old file is rename to \""
+                            + backupName.getFileName()
+                            + "\", new file is \""
+                            + newFileName
+                            + "\"."
+            );
+        } else {
+            System.out.println(
+                    "\nIn \""
+                            + dir
+                            + "\", new file is \""
+                            + newFileName
+                            + "\"."
+            );
+        }
     }
 
     /**
      * 对所有读取的内容进行 ping 测试并将超时部分移除, 将旧的文件改名为 xxx.backup 使用原文件名称创建新的文件
      * @param threadNum ping 线程数
      * @param timeout ping 超时时间
-     * @throws InterruptedException
      */
-    public void pingAndResolve(int threadNum, int timeout) throws InterruptedException {
+    public void pingAndResolve(int threadNum, int timeout) throws InterruptedException, IOException {
         removeFromIndexes(getPingTimeoutLines(threadNum, timeout));
         save();
     }
